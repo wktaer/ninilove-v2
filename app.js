@@ -8,6 +8,15 @@ let events = [];
 let goals = [];
 let songs = [];
 
+// Verificar el estado de autenticación antes de cargar el contenido
+auth.onAuthStateChanged((user) => {
+    if (user) {
+        console.log('Usuario ya autenticado:', user.email);
+        currentUser = user;
+        loadUserData();
+    }
+});
+
 document.addEventListener('DOMContentLoaded', () => {
     // Inicializar autenticación
     initializeAuth();
@@ -21,16 +30,37 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeSongs();
 });
 
-function showLoadingState(loading) {
-    const buttons = document.querySelectorAll('button[type="submit"]');
-    buttons.forEach(button => {
-        button.disabled = loading;
+function showLoadingState(loading, button = null) {
+    const buttons = button ? [button] : document.querySelectorAll('button[type="submit"]');
+    buttons.forEach(btn => {
+        btn.disabled = loading;
         if (loading) {
-            button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Cargando...';
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Cargando...';
         } else {
-            button.innerHTML = button.getAttribute('data-original-text') || (button.closest('#loginForm') ? 'Iniciar Sesión' : 'Registrarse');
+            btn.innerHTML = btn.getAttribute('data-original-text') || (btn.closest('#loginForm') ? 'Iniciar Sesión' : 'Registrarse');
         }
     });
+}
+
+function showError(message, button = null) {
+    if (button) {
+        button.classList.remove('btn-outline-light', 'btn-primary');
+        button.classList.add('btn-danger');
+        setTimeout(() => {
+            button.classList.remove('btn-danger');
+            button.classList.add(button.id === 'loginButton' ? 'btn-outline-light' : 'btn-primary');
+        }, 3000);
+    }
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'alert alert-danger alert-dismissible fade show';
+    errorDiv.role = 'alert';
+    errorDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    `;
+    const container = document.querySelector('.modal-body') || document.querySelector('.container');
+    container.insertBefore(errorDiv, container.firstChild);
+    setTimeout(() => errorDiv.remove(), 5000);
 }
 
 function initializeAuth() {
@@ -52,7 +82,7 @@ function initializeAuth() {
             login_hint: localStorage.getItem('lastLoginEmail') || ''
         });
         try {
-            loginButton.disabled = true;
+            showLoadingState(true, loginButton);
             const result = await signInWithPopup(auth, provider);
             currentUser = result.user;
             localStorage.setItem('lastLoginEmail', currentUser.email);
@@ -63,25 +93,22 @@ function initializeAuth() {
             await loadUserData();
         } catch (error) {
             console.error('Error al iniciar sesión con Google:', error);
-            loginButton.classList.remove('btn-outline-light');
-            loginButton.classList.add('btn-danger');
+            let errorMessage = '';
             if (error.code === 'auth/popup-closed-by-user') {
-                alert('La ventana de inicio de sesión fue cerrada. Por favor, intenta nuevamente.');
+                errorMessage = 'La ventana de inicio de sesión fue cerrada. Por favor, intenta nuevamente.';
             } else if (error.code === 'auth/cancelled-popup-request') {
                 // Ignorar este error ya que es normal cuando se cierra una solicitud anterior
+                return;
             } else if (error.code === 'auth/network-request-failed') {
-                alert('Error de conexión. Por favor, verifica tu conexión a internet.');
+                errorMessage = 'Error de conexión. Por favor, verifica tu conexión a internet.';
             } else if (error.code === 'auth/internal-error') {
-                alert('Error interno del servidor. Por favor, intenta más tarde.');
+                errorMessage = 'Error interno del servidor. Por favor, intenta más tarde.';
             } else {
-                alert('Error al iniciar sesión con Google. Por favor, intenta con correo electrónico.');
+                errorMessage = 'Error al iniciar sesión con Google. Por favor, intenta con correo electrónico.';
             }
-            setTimeout(() => {
-                loginButton.classList.remove('btn-danger');
-                loginButton.classList.add('btn-outline-light');
-            }, 3000);
+            showError(errorMessage, loginButton);
         } finally {
-            loginButton.disabled = false;
+            showLoadingState(false, loginButton);
         }
     });
 
@@ -89,8 +116,9 @@ function initializeAuth() {
         e.preventDefault();
         const email = document.getElementById('loginEmail').value;
         const password = document.getElementById('loginPassword').value;
+        const submitButton = loginForm.querySelector('button[type="submit"]');
 
-        showLoadingState(true);
+        showLoadingState(true, submitButton);
         try {
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             currentUser = userCredential.user;
@@ -103,23 +131,26 @@ function initializeAuth() {
             await loadUserData();
         } catch (error) {
             console.error('Error al iniciar sesión con correo:', error);
-            let errorMessage = 'Error al iniciar sesión. ';
+            let errorMessage = '';
             switch (error.code) {
                 case 'auth/user-not-found':
-                    errorMessage += 'Usuario no encontrado.';
+                    errorMessage = 'Usuario no encontrado. Por favor, verifica tu correo electrónico.';
                     break;
                 case 'auth/wrong-password':
-                    errorMessage += 'Contraseña incorrecta.';
+                    errorMessage = 'Contraseña incorrecta. Por favor, intenta nuevamente.';
                     break;
                 case 'auth/invalid-email':
-                    errorMessage += 'Formato de correo electrónico inválido.';
+                    errorMessage = 'El formato del correo electrónico no es válido.';
+                    break;
+                case 'auth/too-many-requests':
+                    errorMessage = 'Demasiados intentos fallidos. Por favor, intenta más tarde.';
                     break;
                 default:
-                    errorMessage += 'Por favor, verifica tu correo y contraseña.';
+                    errorMessage = 'Error al iniciar sesión. Por favor, verifica tu correo y contraseña.';
             }
-            alert(errorMessage);
+            showError(errorMessage, submitButton);
         } finally {
-            showLoadingState(false);
+            showLoadingState(false, submitButton);
         }
     });
 
