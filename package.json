@@ -1,0 +1,18 @@
+{
+  "name": "ninilover",
+  "version": "1.0.0",
+  "description": "Aplicación web para parejas a distancia",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "firebase": "^10.7.1",
+    "bootstrap": "^5.3.2"
+  },
+  "devDependencies": {
+    "vite": "^5.0.8"
+  }
+}
